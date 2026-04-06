@@ -1,6 +1,6 @@
 # osu! Collection Hub — Desktop
 
-Desktop companion app for [osu! Collection Hub](https://github.com/ripr5/osuCollectorInHouse), a private web app for sharing osu! stable beatmap collections with friends.
+Desktop companion app for [osu! Collection Hub](https://github.com/ryelae/OsuCollectorDesktopApp), a private web app for sharing osu! stable beatmap collections with friends.
 
 Built with Electron + React + TypeScript.
 
@@ -16,7 +16,7 @@ Built with Electron + React + TypeScript.
 ## Requirements
 
 - Windows (osu! stable is Windows-only)
-- An instance of [osu! Collection Hub](https://github.com/ripr5/osuCollectorInHouse) running somewhere (e.g. Fly.io)
+- An instance of [osu! Collection Hub](https://github.com/ryelae/OsuCollectorDesktopApp) running somewhere (e.g. Fly.io)
 - An [osu! API v1 key](https://osu.ppy.sh/p/api)
 
 ## Usage
@@ -55,19 +55,20 @@ Output: `dist/osu! Collection Hub <version>.exe`
 
 ## Tech stack
 
-| Layer | Technology |
-|---|---|
-| Framework | Electron 31 |
-| Build tool | electron-vite |
-| Frontend | React 18, TypeScript |
-| Styling | CSS variables (light + dark mode) |
-| Settings | electron-store |
-| osu! path detection | Windows registry via winreg |
-| Downloads | Node.js https module, multiple mirrors |
+| Layer               | Technology                             |
+| ------------------- | -------------------------------------- |
+| Framework           | Electron 31                            |
+| Build tool          | electron-vite                          |
+| Frontend            | React 18, TypeScript                   |
+| Styling             | CSS variables (light + dark mode)      |
+| Settings            | electron-store                         |
+| osu! path detection | Windows registry via winreg            |
+| Downloads           | Node.js https module, multiple mirrors |
 
 ## Download mirrors
 
 Missing beatmapsets are downloaded in order from:
+
 1. [nerinyan.moe](https://nerinyan.moe)
 2. [catboy.best](https://catboy.best)
 3. [chimu.moe](https://chimu.moe)
