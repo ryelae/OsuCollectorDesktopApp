@@ -1,0 +1,12 @@
+node_modules/
+dist/
+out/
+.claude/
+
+# electron-store settings (contains personal API keys + passwords)
+*.json.bak
+collection.db.bak
+
+# OS
+.DS_Store
+Thumbs.db
