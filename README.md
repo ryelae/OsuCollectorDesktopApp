@@ -1,6 +1,6 @@
 # osu! Collection Hub — Desktop
 
-Desktop companion app for [osu! Collection Hub](https://github.com/ryelae/OsuCollectorDesktopApp), a private web app for sharing osu! stable beatmap collections with friends.
+Desktop companion app for [osu! Collection Hub](https://github.com/ryelae/OsuCollectorWebApp), a private web app for sharing osu! stable beatmap collections with friends.
 
 Built with Electron + React + TypeScript.
 
@@ -16,7 +16,7 @@ Built with Electron + React + TypeScript.
 ## Requirements
 
 - Windows (osu! stable is Windows-only)
-- An instance of [osu! Collection Hub](https://github.com/ryelae/OsuCollectorDesktopApp) running somewhere (e.g. Fly.io)
+- An instance of [osu! Collection Hub](https://github.com/ryelae/OsuCollectorWebApp) running somewhere (e.g. Fly.io)
 - An [osu! API v1 key](https://osu.ppy.sh/p/api)
 
 ## Usage
