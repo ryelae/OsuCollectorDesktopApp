@@ -88,7 +88,7 @@ export default function WelcomeView({ onGoToSettings, onGoToImport }: Props): JS
             osu! Collection Hub
           </h1>
           <p style={{ fontSize: 14, color: 'var(--text-600)' }}>
-            Browse and import your friends' osu! stable collections directly to your Songs folder.
+            Browse and import your friends' osu! stable collections. Maps are downloaded directly from osu!'s servers and written straight into your local collection.db.
           </p>
         </div>
 
@@ -122,23 +122,23 @@ export default function WelcomeView({ onGoToSettings, onGoToImport }: Props): JS
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <Step
               n={1}
-              title="Get an osu! API key"
-              body="Go to osu.ppy.sh/p/api, register an application (redirect URI just needs to be populated, can be http://localhost), and copy your key into Settings → osu! API Key."
+              title="Get an osu! API v1 key"
+              body="Go to osu.ppy.sh/p/api and register an application to get your key. Paste it into Settings → osu! API. This is used to resolve map hashes into beatmapset IDs."
             />
             <Step
               n={2}
-              title="Connect to the web app"
-              body="Enter the web app URL (e.g. https://your-app.fly.dev) and the shared password in Settings. Use Test Connection to verify."
+              title="Log in to osu! for direct downloads"
+              body="Go to osu.ppy.sh/home/account/edit → OAuth Applications → New OAuth Application. Set the callback URL to http://127.0.0.1/osu-hub-callback, then paste the Client ID and Secret into Settings → osu! Account and click Log in. This lets the app download maps directly from osu!'s servers — far more reliable than third-party mirrors."
             />
             <Step
               n={3}
-              title="Set your Songs folder"
-              body="Go to Settings → Songs Folder and click Auto-detect. This is where .osz files will be saved and where osu! looks for maps."
+              title="Connect to the web app"
+              body="Enter the web app URL and shared password in Settings → Web App Connection. Hit Test Connection to confirm. This is where your friends' uploaded collections live."
             />
             <Step
               n={4}
-              title="Import a collection"
-              body="Open Import Collections, load uploads, pick a friend's collection, and click Download & Import. Press F5 in osu! when done to scan for new maps."
+              title="Set your Songs folder and import"
+              body="Click Auto-detect in Settings → Songs Folder, then head to Import Collections. Pick a friend's upload, choose a collection, and click Download & Import. When it finishes, press F5 in osu! to scan for the new maps, then re-open osu! fully to load the updated collection list."
             />
           </div>
         </div>

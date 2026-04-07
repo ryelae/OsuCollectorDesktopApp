@@ -7,6 +7,7 @@ import { registerWebAppHandlers } from './ipc/webApp'
 import { registerOsuApiHandlers } from './ipc/osuApi'
 import { registerDownloadHandlers } from './ipc/download'
 import { registerSizesHandlers } from './ipc/sizes'
+import { registerOsuAuthHandlers } from './ipc/osuAuth'
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -46,6 +47,7 @@ app.whenReady().then(() => {
   registerOsuApiHandlers()
   registerDownloadHandlers()
   registerSizesHandlers()
+  registerOsuAuthHandlers()
   createWindow()
 })
 

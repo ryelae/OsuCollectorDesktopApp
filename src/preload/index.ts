@@ -74,6 +74,16 @@ const api = {
   ): Promise<IpcResponse<{ added: number }>> =>
     ipcRenderer.invoke('collection:addHashes', dbPath, collectionName, hashes),
 
+  // ── osu! Auth ──────────────────────────────────────────────────────────────
+  osuAuthGetStatus: (): Promise<{ loggedIn: boolean; expiry: number }> =>
+    ipcRenderer.invoke('osuAuth:getStatus'),
+
+  osuAuthLogin: (): Promise<IpcResponse<boolean>> =>
+    ipcRenderer.invoke('osuAuth:login'),
+
+  osuAuthLogout: (): Promise<void> =>
+    ipcRenderer.invoke('osuAuth:logout'),
+
   // ── Download ───────────────────────────────────────────────────────────
   startDownload: (items: DownloadItem[]): Promise<IpcResponse<{ failed: number[] }>> =>
     ipcRenderer.invoke('download:start', items),

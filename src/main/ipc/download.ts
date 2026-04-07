@@ -1,10 +1,12 @@
 import { ipcMain } from 'electron'
-import { createWriteStream, mkdirSync, unlinkSync, openSync, readSync, closeSync } from 'fs'
+import { createWriteStream, mkdirSync, unlinkSync, openSync, readSync, closeSync, statSync } from 'fs'
 import { join } from 'path'
 import https from 'https'
 import http from 'http'
 import { store } from '../store'
+import { getValidOsuToken } from './osuAuth'
 import type { DownloadItem, IpcResponse } from '../../shared/types'
+
 
 function getMirrors(noVideo: boolean): ((id: number) => string)[] {
   const mirrors: ((id: number) => string)[] = [
@@ -25,14 +27,15 @@ function getMirrors(noVideo: boolean): ((id: number) => string)[] {
  * Download a URL to a file path, following redirects, using Node https/http.
  * Returns a rejected promise if the final status is not 2xx.
  */
-function downloadToFile(url: string, destPath: string): Promise<void> {
+function downloadToFile(url: string, destPath: string, extraHeaders: Record<string, string> = {}): Promise<void> {
   return new Promise((resolve, reject) => {
     const attempt = (currentUrl: string, redirectsLeft: number) => {
       const mod = currentUrl.startsWith('https') ? https : http
       const req = mod.get(currentUrl, {
         headers: {
           'User-Agent': 'osu-collector-desktop/0.1',
-          'Accept': 'application/octet-stream, */*'
+          'Accept': 'application/octet-stream, */*',
+          ...extraHeaders
         }
       }, (res) => {
         console.log(`  → ${res.statusCode} ${currentUrl.slice(0, 80)}`)
@@ -102,31 +105,56 @@ function isValidZip(filePath: string): boolean {
   }
 }
 
+function fileSizeMB(filePath: string): string {
+  try { return (statSync(filePath).size / 1024 / 1024).toFixed(1) + ' MB' } catch { return '?' }
+}
+
+async function tryDownload(url: string, destPath: string, extraHeaders: Record<string, string> = {}): Promise<void> {
+  await downloadToFile(url, destPath, extraHeaders)
+  if (!isValidZip(destPath)) {
+    const size = (() => { try { return statSync(destPath).size } catch { return '?' } })()
+    try { unlinkSync(destPath) } catch { /* ignore */ }
+    throw new Error(`Not a valid zip (got ${size} bytes — likely an error page)`)
+  }
+}
+
 async function downloadOne(beatmapsetId: number, destFolder: string, noVideo: boolean): Promise<void> {
   mkdirSync(destFolder, { recursive: true })
   const destPath = join(destFolder, `${beatmapsetId}.osz`)
 
   const errors: string[] = []
+
+  // Try osu! official servers first (requires OAuth login)
+  const token = await getValidOsuToken()
+  if (token) {
+    const url = `https://osu.ppy.sh/beatmapsets/${beatmapsetId}/download${noVideo ? '?noVideo=1' : ''}`
+    console.log(`[download] #${beatmapsetId} trying osu! official`)
+    try {
+      await tryDownload(url, destPath, { 'Authorization': `Bearer ${token}` })
+      console.log(`[download] #${beatmapsetId} OK from osu! official (${fileSizeMB(destPath)})`)
+      return
+    } catch (err) {
+      console.warn(`[download] #${beatmapsetId} osu! official failed: ${err}`)
+      errors.push(`osu! official: ${err}`)
+    }
+  }
+
+  // Fall back to public mirrors
   for (const mirror of getMirrors(noVideo)) {
     const url = mirror(beatmapsetId)
     console.log(`[download] #${beatmapsetId} trying ${url}`)
     try {
-      await downloadToFile(url, destPath)
-      if (!isValidZip(destPath)) {
-        const size = (() => { try { return require('fs').statSync(destPath).size } catch { return '?' } })()
-        unlinkSync(destPath)
-        throw new Error(`Not a valid zip (got ${size} bytes — likely an error page)`)
-      }
-      const size = require('fs').statSync(destPath).size
-      console.log(`[download] #${beatmapsetId} OK from ${url} (${(size / 1024 / 1024).toFixed(1)} MB)`)
-      return // success
+      await tryDownload(url, destPath)
+      console.log(`[download] #${beatmapsetId} OK from ${url} (${fileSizeMB(destPath)})`)
+      return
     } catch (err) {
       console.warn(`[download] #${beatmapsetId} FAILED ${url}: ${err}`)
       errors.push(`${url}: ${err}`)
     }
   }
-  console.error(`[download] #${beatmapsetId} all mirrors failed:\n  ${errors.join('\n  ')}`)
-  throw new Error(`All mirrors failed for beatmapset ${beatmapsetId}:\n${errors.join('\n')}`)
+
+  console.error(`[download] #${beatmapsetId} all sources failed:\n  ${errors.join('\n  ')}`)
+  throw new Error(`All sources failed for beatmapset ${beatmapsetId}:\n${errors.join('\n')}`)
 }
 
 export function registerDownloadHandlers(): void {

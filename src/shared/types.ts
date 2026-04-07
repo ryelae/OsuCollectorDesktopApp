@@ -70,6 +70,11 @@ export interface AppSettings {
   osuApiKey: string
   songsFolder: string
   noVideo: boolean
+  osuClientId: string
+  osuClientSecret: string
+  osuAccessToken: string
+  osuRefreshToken: string
+  osuTokenExpiry: number   // Unix ms
 }
 
 // ── IPC channel payloads ───────────────────────────────────────────────────

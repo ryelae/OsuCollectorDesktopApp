@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { AppSettings } from '../../../shared/types'
 
 type PingState = 'idle' | 'loading' | 'ok' | 'fail'
+type LoginState = 'idle' | 'loading' | 'ok' | 'fail'
 
 export default function SettingsPanel(): JSX.Element {
   const [settings, setSettings] = useState<AppSettings>({
@@ -9,14 +10,46 @@ export default function SettingsPanel(): JSX.Element {
     webAppPassword: '',
     osuApiKey: '',
     songsFolder: '',
-    noVideo: true
+    noVideo: true,
+    osuClientId: '',
+    osuClientSecret: '',
+    osuAccessToken: '',
+    osuRefreshToken: '',
+    osuTokenExpiry: 0
   })
   const [pingState, setPingState] = useState<PingState>('idle')
   const [pingError, setPingError] = useState('')
   const [saved, setSaved] = useState(false)
   const [detectMsg, setDetectMsg] = useState('')
+  const [osuLoggedIn, setOsuLoggedIn] = useState(false)
+  const [loginState, setLoginState] = useState<LoginState>('idle')
+  const [loginError, setLoginError] = useState('')
 
-  useEffect(() => { window.api.getSettings().then(setSettings) }, [])
+  useEffect(() => {
+    window.api.getSettings().then(setSettings)
+    window.api.osuAuthGetStatus().then((s) => setOsuLoggedIn(s.loggedIn))
+  }, [])
+
+  async function osuLogin() {
+    await save()  // save client id/secret first
+    setLoginState('loading')
+    setLoginError('')
+    const res = await window.api.osuAuthLogin()
+    if (res.ok) {
+      setOsuLoggedIn(true)
+      setLoginState('ok')
+    } else {
+      setLoginState('fail')
+      setLoginError(res.error)
+    }
+  }
+
+  async function osuLogout() {
+    await window.api.osuAuthLogout()
+    setOsuLoggedIn(false)
+    setLoginState('idle')
+    setLoginError('')
+  }
 
   async function save() {
     await window.api.setSettings(settings)
@@ -103,6 +136,61 @@ export default function SettingsPanel(): JSX.Element {
               placeholder="Get from osu.ppy.sh/p/api"
               onChange={(e) => setSettings((s) => ({ ...s, osuApiKey: e.target.value }))}
             />
+          </div>
+        </div>
+
+        {/* osu! Account (OAuth) */}
+        <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+          <SectionHeading>osu! Account</SectionHeading>
+          <p style={{ fontSize: 12, color: 'var(--text-500)', marginBottom: 12, lineHeight: 1.6 }}>
+            Log in to download maps directly from osu!. Create an OAuth app at{' '}
+            <strong style={{ color: 'var(--text-700)' }}>osu.ppy.sh/home/account/edit</strong>{' '}
+            → OAuth Applications → New OAuth Application. Set the callback URL to{' '}
+            <code style={{ fontSize: 11, background: 'var(--bg)', padding: '1px 5px', borderRadius: 4 }}>
+              http://127.0.0.1/osu-hub-callback
+            </code>
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div className="field">
+              <label>Client ID</label>
+              <input
+                value={settings.osuClientId}
+                placeholder="12345"
+                onChange={(e) => setSettings((s) => ({ ...s, osuClientId: e.target.value }))}
+              />
+            </div>
+            <div className="field">
+              <label>Client Secret</label>
+              <input
+                type="password"
+                value={settings.osuClientSecret}
+                placeholder="••••••••••••••••"
+                onChange={(e) => setSettings((s) => ({ ...s, osuClientSecret: e.target.value }))}
+              />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              {osuLoggedIn ? (
+                <>
+                  <span className="badge badge-green">Logged in</span>
+                  <button className="btn-secondary" onClick={osuLogout} style={{ fontSize: 13 }}>
+                    Log out
+                  </button>
+                </>
+              ) : (
+                <button
+                  className="btn-primary"
+                  onClick={osuLogin}
+                  disabled={loginState === 'loading'}
+                  style={{ fontSize: 13 }}
+                >
+                  {loginState === 'loading' ? 'Opening login…' : 'Log in to osu!'}
+                </button>
+              )}
+              {loginState === 'ok' && <span className="badge badge-green">Connected!</span>}
+              {loginState === 'fail' && (
+                <span style={{ fontSize: 12, color: 'var(--red-600)' }}>{loginError}</span>
+              )}
+            </div>
           </div>
         </div>
 

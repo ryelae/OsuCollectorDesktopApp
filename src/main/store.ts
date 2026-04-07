@@ -6,7 +6,12 @@ const defaults: AppSettings = {
   webAppPassword: '',
   osuApiKey: '',
   songsFolder: '',
-  noVideo: true
+  noVideo: true,
+  osuClientId: '',
+  osuClientSecret: '',
+  osuAccessToken: '',
+  osuRefreshToken: '',
+  osuTokenExpiry: 0
 }
 
 export const store = new Store<AppSettings>({
