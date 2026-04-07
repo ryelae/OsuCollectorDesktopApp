@@ -82,7 +82,7 @@ export function getInstalledBeatmapsetIds(songsFolder: string): Set<number> {
     for (const entry of entries) {
       // Extracted folder: "1234567 Artist - Title"
       if (entry.isDirectory()) {
-        const match = entry.name.match(/^(\d+)[\s_]/)
+        const match = entry.name.match(/^(\d+)(?:[\s_]|$)/)
         if (match) installed.add(parseInt(match[1], 10))
       }
       // Unimported .osz still sitting in Songs folder: "1234567.osz"
