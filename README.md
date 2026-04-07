@@ -18,6 +18,7 @@ Built with Electron + React + TypeScript.
 - Windows (osu! stable is Windows-only)
 - An instance of [osu! Collection Hub](https://github.com/ryelae/OsuCollectorWebApp) running somewhere (e.g. Fly.io)
 - An [osu! API v1 key](https://osu.ppy.sh/p/api)
+- An osu! OAuth Token
 
 ## Usage
 
