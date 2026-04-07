@@ -56,6 +56,16 @@ const api = {
     return () => ipcRenderer.removeListener('osuApi:resolveProgress', handler)
   },
 
+  // ── Sizes ──────────────────────────────────────────────────────────────
+  fetchSizes: (beatmapsetIds: number[]): Promise<IpcResponse<Record<number, number>>> =>
+    ipcRenderer.invoke('sizes:fetch', beatmapsetIds),
+
+  onSizesProgress: (cb: (progress: { completed: number; total: number }) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, data: { completed: number; total: number }) => cb(data)
+    ipcRenderer.on('sizes:progress', handler)
+    return () => ipcRenderer.removeListener('sizes:progress', handler)
+  },
+
   // ── Collection writer ──────────────────────────────────────────────────
   addHashesToCollection: (
     dbPath: string,

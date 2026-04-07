@@ -27,6 +27,8 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
   const [stage, setStage] = useState<Stage>('idle')
   const [maps, setMaps] = useState<MissingMap[]>([])
   const [installedIds, setInstalledIds] = useState<Set<number>>(new Set())
+  const [sizes, setSizes] = useState<Record<number, number>>({})
+  const [sizesLoading, setSizesLoading] = useState(false)
   const [resolveProgress, setResolveProgress] = useState<{ completed: number; total: number } | null>(null)
   const [resolveError, setResolveError] = useState('')
   const [downloadItems, setDownloadItems] = useState<DownloadItem[]>([])
@@ -34,8 +36,9 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
 
   const unsubResolve = useRef<(() => void) | null>(null)
   const unsubDownload = useRef<(() => void) | null>(null)
+  const unsubSizes = useRef<(() => void) | null>(null)
 
-  useEffect(() => () => { unsubResolve.current?.(); unsubDownload.current?.() }, [])
+  useEffect(() => () => { unsubResolve.current?.(); unsubDownload.current?.(); unsubSizes.current?.() }, [])
 
   async function loadUploads() {
     setUploadsLoading(true)
@@ -71,6 +74,8 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
     setGeneralError('')
     setResolveError('')
     setMaps([])
+    setSizes({})
+    setSizesLoading(false)
     setStage('idle')
 
     const hashRes = await window.api.getCollectionHashes(selectedUpload.id, col.id)
@@ -79,6 +84,17 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
     const initial = hashRes.data.map((hash) => ({ hash, beatmapsetId: null as number | null }))
     setMaps(initial)
     await resolveAll(hashRes.data)
+  }
+
+  async function refreshInstalled() {
+    const settings = await window.api.getSettings()
+    if (!settings.songsFolder) {
+      console.warn('refreshInstalled: no songsFolder configured')
+      return
+    }
+    const res = await window.api.getInstalledIds(settings.songsFolder)
+    console.log('refreshInstalled:', settings.songsFolder, res)
+    if (res.ok) setInstalledIds(new Set(res.data))
   }
 
   async function resolveAll(hashes: string[]) {
@@ -104,6 +120,20 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
     }
 
     setStage('idle')
+
+    // Fetch sizes in background — don't block the UI
+    const uniqueIds = [...new Set(res.data.filter(m => m.beatmapsetId !== null).map(m => m.beatmapsetId!))]
+    if (uniqueIds.length > 0) {
+      setSizes({})
+      setSizesLoading(true)
+      unsubSizes.current?.()
+      unsubSizes.current = window.api.onSizesProgress(() => {}) // subscribe to keep channel alive
+      const sizesRes = await window.api.fetchSizes(uniqueIds)
+      unsubSizes.current?.()
+      unsubSizes.current = null
+      if (sizesRes.ok) setSizes(sizesRes.data)
+      setSizesLoading(false)
+    }
   }
 
   async function startDownload() {
@@ -132,6 +162,7 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
         const writeRes = await window.api.addHashesToCollection(dbPath, selectedCollection.name, allHashes)
         if (!writeRes.ok) setGeneralError(`Failed to update collection.db: ${writeRes.error}`)
       }
+      await refreshInstalled()
       return
     }
 
@@ -173,16 +204,29 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
     } else if (!dbPath) {
       setGeneralError('Downloaded OK but Songs folder not configured — collection.db not updated')
     }
+
+    // Refresh installed IDs so newly-downloaded maps show as Installed when user clicks Back
+    await refreshInstalled()
   }
 
   if (stage === 'download') {
-    return <DownloadProgress items={downloadItems} onBack={() => setStage('idle')} />
+    return <DownloadProgress items={downloadItems} onBack={async () => { setStage('idle'); await refreshInstalled() }} />
   }
 
   const resolved = maps.filter((m) => m.beatmapsetId !== null)
   const unresolved = maps.filter((m) => m.beatmapsetId === null)
   const notInstalled = resolved.filter((m) => !installedIds.has(m.beatmapsetId!))
   const uniqueToDownload = new Set(notInstalled.map((m) => m.beatmapsetId)).size
+
+  // Total download size — only uninstalled beatmapsets with known sizes
+  const uniqueToDownloadIds = new Set(notInstalled.map((m) => m.beatmapsetId!))
+  const totalBytes = [...uniqueToDownloadIds].reduce((acc, id) => acc + (sizes[id] ?? 0), 0)
+
+  function formatBytes(bytes: number): string {
+    if (bytes === 0) return ''
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
 
   return (
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
@@ -350,9 +394,19 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
                     Retry resolve
                   </button>
                 )}
+                {stage === 'idle' && maps.length > 0 && (
+                  <button className="btn-secondary" style={{ fontSize: 12 }} onClick={refreshInstalled} title="Re-scan Songs folder for newly installed maps">
+                    Refresh
+                  </button>
+                )}
                 {stage === 'idle' && uniqueToDownload > 0 && (
-                  <button className="btn-primary" onClick={startDownload}>
-                    Download &amp; Import {uniqueToDownload} beatmapset{uniqueToDownload !== 1 ? 's' : ''}
+                  <button className="btn-primary" onClick={startDownload} style={{ flexDirection: 'column', gap: 1, lineHeight: 1.3 }}>
+                    <span>Download &amp; Import {uniqueToDownload} beatmapset{uniqueToDownload !== 1 ? 's' : ''}</span>
+                    {(totalBytes > 0 || sizesLoading) && (
+                      <span style={{ fontSize: 11, opacity: 0.85 }}>
+                        {totalBytes > 0 ? formatBytes(totalBytes) : 'calculating size…'}
+                      </span>
+                    )}
                   </button>
                 )}
                 {stage === 'idle' && resolved.length > 0 && uniqueToDownload === 0 && (
@@ -401,6 +455,7 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
                         <th style={{ padding: '8px 16px', fontWeight: 500, fontSize: 12, color: 'var(--text-500)', textAlign: 'left' }}>Beatmapset</th>
                         <th style={{ padding: '8px 16px', fontWeight: 500, fontSize: 12, color: 'var(--text-500)', textAlign: 'left' }}>Title</th>
                         <th style={{ padding: '8px 16px', fontWeight: 500, fontSize: 12, color: 'var(--text-500)', textAlign: 'left' }}>Artist</th>
+                        <th style={{ padding: '8px 16px', fontWeight: 500, fontSize: 12, color: 'var(--text-500)', textAlign: 'right' }}>Size</th>
                         <th style={{ padding: '8px 16px', fontWeight: 500, fontSize: 12, color: 'var(--text-500)', textAlign: 'right' }}></th>
                       </tr>
                     </thead>
@@ -417,6 +472,13 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
                             </td>
                             <td style={{ padding: '8px 16px', color: 'var(--text-900)' }}>{m.title ?? '—'}</td>
                             <td style={{ padding: '8px 16px', color: 'var(--text-600)' }}>{m.artist ?? '—'}</td>
+                            <td style={{ padding: '8px 16px', textAlign: 'right', color: 'var(--text-500)', fontSize: 12, whiteSpace: 'nowrap' }}>
+                              {m.beatmapsetId !== null && sizes[m.beatmapsetId]
+                                ? formatBytes(sizes[m.beatmapsetId])
+                                : sizesLoading && m.beatmapsetId !== null && !owned
+                                  ? <span style={{ color: 'var(--text-400)' }}>…</span>
+                                  : ''}
+                            </td>
                             <td style={{ padding: '8px 16px', textAlign: 'right' }}>
                               {owned && <span className="badge badge-green">Installed</span>}
                             </td>

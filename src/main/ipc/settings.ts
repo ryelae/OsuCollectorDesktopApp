@@ -35,8 +35,10 @@ export function registerSettingsHandlers(): void {
   ipcMain.handle('settings:getInstalledIds', (_e, songsFolder: string): IpcResponse<number[]> => {
     try {
       const ids = getInstalledBeatmapsetIds(songsFolder)
+      console.log(`getInstalledIds: scanned "${songsFolder}", found ${ids.size} beatmapsets`)
       return { ok: true, data: Array.from(ids) }
     } catch (err) {
+      console.error('getInstalledIds error:', err)
       return { ok: false, error: String(err) }
     }
   })

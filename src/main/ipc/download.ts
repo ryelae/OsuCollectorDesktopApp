@@ -6,12 +6,15 @@ import http from 'http'
 import { store } from '../store'
 import type { DownloadItem, IpcResponse } from '../../shared/types'
 
-const MIRRORS = [
-  (id: number) => `https://api.nerinyan.moe/d/${id}`,
-  (id: number) => `https://catboy.best/d/${id}`,
-  (id: number) => `https://api.chimu.moe/v1/download/${id}?n=1`,
-  (id: number) => `https://beatconnect.io/b/${id}`
-]
+function getMirrors(noVideo: boolean): ((id: number) => string)[] {
+  const nv = noVideo ? 1 : 0
+  return [
+    (id) => `https://api.nerinyan.moe/d/${id}?noVideo=${nv}`,
+    (id) => `https://catboy.best/d/${id}?noVideo=${nv}`,
+    (id) => `https://api.chimu.moe/v1/download/${id}?n=${nv}`,
+    (id) => `https://beatconnect.io/b/${id}`
+  ]
+}
 
 /**
  * Download a URL to a file path, following redirects, using Node https/http.
@@ -85,12 +88,12 @@ function isValidZip(filePath: string): boolean {
   }
 }
 
-async function downloadOne(beatmapsetId: number, destFolder: string): Promise<void> {
+async function downloadOne(beatmapsetId: number, destFolder: string, noVideo: boolean): Promise<void> {
   mkdirSync(destFolder, { recursive: true })
   const destPath = join(destFolder, `${beatmapsetId}.osz`)
 
   const errors: string[] = []
-  for (const mirror of MIRRORS) {
+  for (const mirror of getMirrors(noVideo)) {
     const url = mirror(beatmapsetId)
     try {
       await downloadToFile(url, destPath)
@@ -112,6 +115,7 @@ export function registerDownloadHandlers(): void {
     async (event, items: DownloadItem[]): Promise<IpcResponse<{ failed: number[] }>> => {
       const songsFolder = store.get('songsFolder')
       if (!songsFolder) return { ok: false, error: 'Songs folder not configured' }
+      const noVideo = store.get('noVideo') ?? true
 
       const failed: number[] = []
       const CONCURRENCY = 3
@@ -122,7 +126,7 @@ export function registerDownloadHandlers(): void {
           chunk.map(async (item) => {
             event.sender.send('download:progress', { beatmapsetId: item.beatmapsetId, status: 'downloading' })
             try {
-              await downloadOne(item.beatmapsetId, songsFolder)
+              await downloadOne(item.beatmapsetId, songsFolder, noVideo)
               event.sender.send('download:progress', { beatmapsetId: item.beatmapsetId, status: 'done' })
             } catch (err) {
               failed.push(item.beatmapsetId)

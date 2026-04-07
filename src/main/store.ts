@@ -5,7 +5,8 @@ const defaults: AppSettings = {
   webAppUrl: '',
   webAppPassword: '',
   osuApiKey: '',
-  songsFolder: ''
+  songsFolder: '',
+  noVideo: true
 }
 
 export const store = new Store<AppSettings>({

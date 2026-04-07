@@ -8,7 +8,8 @@ export default function SettingsPanel(): JSX.Element {
     webAppUrl: '',
     webAppPassword: '',
     osuApiKey: '',
-    songsFolder: ''
+    songsFolder: '',
+    noVideo: true
   })
   const [pingState, setPingState] = useState<PingState>('idle')
   const [pingError, setPingError] = useState('')
@@ -127,6 +128,25 @@ export default function SettingsPanel(): JSX.Element {
               <span style={{ fontSize: 12, color: 'var(--text-500)', marginTop: 4 }}>{detectMsg}</span>
             )}
           </div>
+        </div>
+
+        {/* Downloads */}
+        <div className="card" style={{ padding: 20, marginBottom: 24 }}>
+          <SectionHeading>Downloads</SectionHeading>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: 0 }}>
+            <input
+              type="checkbox"
+              checked={settings.noVideo}
+              onChange={(e) => setSettings((s) => ({ ...s, noVideo: e.target.checked }))}
+              style={{ width: 16, height: 16, accentColor: 'var(--brand-500)', cursor: 'pointer' }}
+            />
+            <div>
+              <div style={{ fontWeight: 500, fontSize: 13, color: 'var(--text-900)' }}>Skip video downloads (WIP!)</div>
+              <div style={{ fontSize: 12, color: 'var(--text-500)', marginTop: 2 }}>
+                Downloads maps without background videos — significantly smaller file sizes. Sizes shown in the app will match.
+              </div>
+            </div>
+          </label>
         </div>
 
         <button className="btn-primary" onClick={save}>

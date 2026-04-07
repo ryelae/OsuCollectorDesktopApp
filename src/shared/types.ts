@@ -69,6 +69,7 @@ export interface AppSettings {
   webAppPassword: string
   osuApiKey: string
   songsFolder: string
+  noVideo: boolean
 }
 
 // ── IPC channel payloads ───────────────────────────────────────────────────

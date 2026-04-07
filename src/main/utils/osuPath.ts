@@ -80,12 +80,19 @@ export function getInstalledBeatmapsetIds(songsFolder: string): Set<number> {
   try {
     const entries = readdirSync(songsFolder, { withFileTypes: true })
     for (const entry of entries) {
-      if (!entry.isDirectory()) continue
-      const match = entry.name.match(/^(\d+)[\s_]/)
-      if (match) installed.add(parseInt(match[1], 10))
+      // Extracted folder: "1234567 Artist - Title"
+      if (entry.isDirectory()) {
+        const match = entry.name.match(/^(\d+)[\s_]/)
+        if (match) installed.add(parseInt(match[1], 10))
+      }
+      // Unimported .osz still sitting in Songs folder: "1234567.osz"
+      if (entry.isFile() && entry.name.endsWith('.osz')) {
+        const match = entry.name.match(/^(\d+)\.osz$/)
+        if (match) installed.add(parseInt(match[1], 10))
+      }
     }
-  } catch {
-    // folder unreadable — return empty set, download will proceed normally
+  } catch (err) {
+    console.error('getInstalledBeatmapsetIds: failed to read folder', songsFolder, err)
   }
   return installed
 }

@@ -7,6 +7,7 @@ import { registerCollectionWriterHandlers } from './ipc/collectionWriter'
 import { registerWebAppHandlers } from './ipc/webApp'
 import { registerOsuApiHandlers } from './ipc/osuApi'
 import { registerDownloadHandlers } from './ipc/download'
+import { registerSizesHandlers } from './ipc/sizes'
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -45,6 +46,7 @@ app.whenReady().then(() => {
   registerWebAppHandlers()
   registerOsuApiHandlers()
   registerDownloadHandlers()
+  registerSizesHandlers()
   createWindow()
 })
 
