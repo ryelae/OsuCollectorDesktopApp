@@ -7,13 +7,18 @@ import { store } from '../store'
 import type { DownloadItem, IpcResponse } from '../../shared/types'
 
 function getMirrors(noVideo: boolean): ((id: number) => string)[] {
-  const nv = noVideo ? 1 : 0
-  return [
-    (id) => `https://api.nerinyan.moe/d/${id}?noVideo=${nv}`,
-    (id) => `https://catboy.best/d/${id}?noVideo=${nv}`,
-    (id) => `https://api.chimu.moe/v1/download/${id}?n=${nv}`,
-    (id) => `https://beatconnect.io/b/${id}`
+  const mirrors: ((id: number) => string)[] = [
+    (id) => `https://api.nerinyan.moe/d/${id}?noVideo=${noVideo ? 1 : 0}`,
   ]
+  // If the no-video version doesn't exist on nerinyan's CDN, fall back to the full version
+  if (noVideo) {
+    mirrors.push((id) => `https://api.nerinyan.moe/d/${id}?noVideo=0`)
+  }
+  mirrors.push(
+    (id) => `https://osu.direct/api/d/${id}${noVideo ? '?noVideo=1' : ''}`,
+    (id) => `https://beatconnect.io/b/${id}`
+  )
+  return mirrors
 }
 
 /**
@@ -30,6 +35,7 @@ function downloadToFile(url: string, destPath: string): Promise<void> {
           'Accept': 'application/octet-stream, */*'
         }
       }, (res) => {
+        console.log(`  → ${res.statusCode} ${currentUrl.slice(0, 80)}`)
         // Follow redirects
         if (
           res.statusCode &&
@@ -42,7 +48,15 @@ function downloadToFile(url: string, destPath: string): Promise<void> {
             return
           }
           res.resume() // drain
-          attempt(res.headers.location, redirectsLeft - 1)
+          // Resolve relative redirect URLs against the current URL
+          let nextUrl: string
+          try {
+            nextUrl = new URL(res.headers.location, currentUrl).href
+          } catch {
+            reject(new Error(`Invalid redirect URL: ${res.headers.location}`))
+            return
+          }
+          attempt(nextUrl, redirectsLeft - 1)
           return
         }
 
@@ -95,17 +109,23 @@ async function downloadOne(beatmapsetId: number, destFolder: string, noVideo: bo
   const errors: string[] = []
   for (const mirror of getMirrors(noVideo)) {
     const url = mirror(beatmapsetId)
+    console.log(`[download] #${beatmapsetId} trying ${url}`)
     try {
       await downloadToFile(url, destPath)
       if (!isValidZip(destPath)) {
+        const size = (() => { try { return require('fs').statSync(destPath).size } catch { return '?' } })()
         unlinkSync(destPath)
-        throw new Error('Not a valid zip (likely an error page)')
+        throw new Error(`Not a valid zip (got ${size} bytes — likely an error page)`)
       }
+      const size = require('fs').statSync(destPath).size
+      console.log(`[download] #${beatmapsetId} OK from ${url} (${(size / 1024 / 1024).toFixed(1)} MB)`)
       return // success
     } catch (err) {
+      console.warn(`[download] #${beatmapsetId} FAILED ${url}: ${err}`)
       errors.push(`${url}: ${err}`)
     }
   }
+  console.error(`[download] #${beatmapsetId} all mirrors failed:\n  ${errors.join('\n  ')}`)
   throw new Error(`All mirrors failed for beatmapset ${beatmapsetId}:\n${errors.join('\n')}`)
 }
 

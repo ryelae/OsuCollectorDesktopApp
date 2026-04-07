@@ -1,6 +1,5 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'path'
-import { is } from '@electron-toolkit/utils'
 import { registerSettingsHandlers } from './ipc/settings'
 import { registerCollectionHandlers } from './ipc/collection'
 import { registerCollectionWriterHandlers } from './ipc/collectionWriter'
@@ -32,7 +31,7 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
-  if (is.dev && process.env.ELECTRON_RENDERER_URL) {
+  if (process.env.ELECTRON_RENDERER_URL) {
     win.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
     win.loadFile(join(__dirname, '../renderer/index.html'))

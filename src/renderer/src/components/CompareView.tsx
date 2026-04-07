@@ -33,12 +33,20 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
   const [resolveError, setResolveError] = useState('')
   const [downloadItems, setDownloadItems] = useState<DownloadItem[]>([])
   const [generalError, setGeneralError] = useState('')
+  const [addedToDb, setAddedToDb] = useState(false)
 
   const unsubResolve = useRef<(() => void) | null>(null)
   const unsubDownload = useRef<(() => void) | null>(null)
   const unsubSizes = useRef<(() => void) | null>(null)
 
   useEffect(() => () => { unsubResolve.current?.(); unsubDownload.current?.(); unsubSizes.current?.() }, [])
+
+  // Auto-refresh installed IDs when window regains focus (e.g. after manually deleting maps)
+  useEffect(() => {
+    const onFocus = () => { if (maps.length > 0) refreshInstalled() }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [maps])
 
   async function loadUploads() {
     setUploadsLoading(true)
@@ -77,6 +85,7 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
     setSizes({})
     setSizesLoading(false)
     setStage('idle')
+    setAddedToDb(false)
 
     const hashRes = await window.api.getCollectionHashes(selectedUpload.id, col.id)
     if (!hashRes.ok) { setGeneralError(hashRes.error); return }
@@ -161,6 +170,7 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
       if (dbPath && allHashes.length > 0) {
         const writeRes = await window.api.addHashesToCollection(dbPath, selectedCollection.name, allHashes)
         if (!writeRes.ok) setGeneralError(`Failed to update collection.db: ${writeRes.error}`)
+        else setAddedToDb(true)
       }
       await refreshInstalled()
       return
@@ -201,6 +211,7 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
     if (dbPath && allHashes.length > 0) {
       const writeRes = await window.api.addHashesToCollection(dbPath, selectedCollection.name, allHashes)
       if (!writeRes.ok) setGeneralError(`Downloaded OK but failed to update collection.db: ${writeRes.error}`)
+      else setAddedToDb(true)
     } else if (!dbPath) {
       setGeneralError('Downloaded OK but Songs folder not configured — collection.db not updated')
     }
@@ -410,8 +421,8 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
                   </button>
                 )}
                 {stage === 'idle' && resolved.length > 0 && uniqueToDownload === 0 && (
-                  <button className="btn-secondary" onClick={startDownload} style={{ fontSize: 13 }}>
-                    Add to collection.db
+                  <button className="btn-secondary" onClick={startDownload} disabled={addedToDb} style={{ fontSize: 13 }}>
+                    {addedToDb ? 'Added!' : 'Add to collection.db'}
                   </button>
                 )}
               </div>
@@ -467,7 +478,9 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
                             <td style={{ padding: '8px 16px', color: 'var(--brand-500)', fontWeight: 500 }}>
                               {m.beatmapsetId !== null
                                 ? `#${m.beatmapsetId}`
-                                : <span style={{ color: 'var(--text-400)', fontSize: 12 }}>resolving…</span>
+                                : stage === 'resolve'
+                                  ? <span style={{ color: 'var(--text-400)', fontSize: 12 }}>resolving…</span>
+                                  : <span style={{ color: 'var(--text-400)', fontSize: 12 }}>not found</span>
                               }
                             </td>
                             <td style={{ padding: '8px 16px', color: 'var(--text-900)' }}>{m.title ?? '—'}</td>
