@@ -1,6 +1,6 @@
 {
   "name": "osu-collector-desktop",
-  "version": "0.3.0",
+  "version": "0.3.2",
   "author": "ryelae",
   "description": "Desktop companion for osu! Collection Hub",
   "main": "out/main/index.js",

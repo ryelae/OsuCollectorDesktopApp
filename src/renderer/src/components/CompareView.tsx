@@ -21,6 +21,7 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [collectionsByUpload, setCollectionsByUpload] = useState<Record<string, RemoteCollection[]>>({})
   const [loadingUploads, setLoadingUploads] = useState<Set<string>>(new Set())
+  const [searchQuery, setSearchQuery] = useState('')
 
   const [selectedUploadId, setSelectedUploadId] = useState<string | null>(null)
   const [selectedCollection, setSelectedCollection] = useState<RemoteCollection | null>(null)
@@ -250,7 +251,7 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
         background: 'var(--surface)',
         display: 'flex', flexDirection: 'column', overflow: 'hidden'
       }}>
-        <div style={{ padding: '12px', borderBottom: '1px solid var(--divider)', flexShrink: 0 }}>
+        <div style={{ padding: '12px', borderBottom: '1px solid var(--divider)', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <button
             className="btn-secondary"
             style={{ width: '100%', justifyContent: 'center', fontSize: 13 }}
@@ -259,7 +260,25 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
           >
             {uploadsLoading ? 'Loading…' : uploads.length ? 'Refresh Uploads' : 'Load Uploads'}
           </button>
-          {uploadsError && <p className="alert-error" style={{ marginTop: 8, fontSize: 12 }}>{uploadsError}</p>}
+          {uploads.length > 0 && (
+            <div style={{ position: 'relative' }}>
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search collections…"
+                style={{ width: '100%', fontSize: 12, padding: '5px 28px 5px 10px', boxSizing: 'border-box' }}
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-400)', fontSize: 14, padding: 0, lineHeight: 1 }}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          )}
+          {uploadsError && <p className="alert-error" style={{ marginTop: 0, fontSize: 12 }}>{uploadsError}</p>}
         </div>
 
         <div className="scroll-area" style={{ flex: 1 }}>
@@ -271,13 +290,18 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
 
           <div className="divide-list">
             {[...grouped.entries()].map(([name, groupUploads]) => {
-              const isOpen = expandedGroups.has(name)
+              const query = searchQuery.trim().toLowerCase()
+              const isOpen = query ? true : expandedGroups.has(name)
               const totalMaps = groupUploads.reduce((a, u) => a + u.totalMaps, 0)
               const totalCollections = groupUploads.reduce((a, u) => a + u.collectionCount, 0)
               const isLoading = groupUploads.some((u) => loadingUploads.has(u.id))
               const allCollections = groupUploads.flatMap((u) =>
                 (collectionsByUpload[u.id] ?? []).map((col) => ({ col, uploadId: u.id }))
-              )
+              ).filter(({ col }) => !query || col.name.toLowerCase().includes(query))
+
+              const groupMatches = !query || name.toLowerCase().includes(query)
+              const filteredCollections = groupMatches ? allCollections : allCollections.filter(({ col }) => col.name.toLowerCase().includes(query))
+              if (query && !groupMatches && filteredCollections.length === 0) return null
 
               return (
                 <div key={name}>
@@ -310,7 +334,7 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
                       {isLoading && (
                         <p style={{ padding: '8px 12px 8px 32px', color: 'var(--text-400)', fontSize: 12 }}>Loading…</p>
                       )}
-                      {allCollections.map(({ col, uploadId }) => {
+                      {filteredCollections.map(({ col, uploadId }) => {
                         const active = selectedCollection?.id === col.id
                         return (
                           <button
