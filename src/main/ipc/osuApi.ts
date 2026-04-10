@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
 import { store } from '../store'
+import { getCached, setCached, getCacheSize } from '../hashCache'
 import type { MissingMap, IpcResponse } from '../../shared/types'
 
 const OSU_API_BASE = 'https://osu.ppy.sh/api'
@@ -40,34 +41,55 @@ export function registerOsuApiHandlers(): void {
       if (!apiKey) return { ok: false, error: 'osu! API key not configured' }
 
       const CONCURRENCY = 5
-      const DELAY_MS = 200  // 200 ms between each request within a slot
+      const DELAY_MS = 200
 
       const results: MissingMap[] = hashes.map((hash) => ({ hash, beatmapsetId: null }))
       let completed = 0
+      let cacheHits = 0
 
-      // Process in chunks of CONCURRENCY
-      for (let i = 0; i < hashes.length; i += CONCURRENCY) {
-        const chunk = hashes.slice(i, i + CONCURRENCY)
+      // Separate hashes into cache hits and misses
+      const toFetch: Array<{ hash: string; idx: number }> = []
+      for (let i = 0; i < hashes.length; i++) {
+        const cached = getCached(hashes[i])
+        if (cached) {
+          results[i].beatmapsetId = cached.beatmapsetId
+          results[i].title = cached.title
+          results[i].artist = cached.artist
+          completed++
+          cacheHits++
+        } else {
+          toFetch.push({ hash: hashes[i], idx: i })
+        }
+      }
+
+      // Report cache hits immediately so progress bar advances
+      if (cacheHits > 0) {
+        event.sender.send('osuApi:resolveProgress', { completed, total: hashes.length })
+        console.log(`[osuApi] ${cacheHits}/${hashes.length} resolved from cache (${getCacheSize()} total cached)`)
+      }
+
+      // Fetch remaining from osu! API
+      for (let i = 0; i < toFetch.length; i += CONCURRENCY) {
+        const chunk = toFetch.slice(i, i + CONCURRENCY)
         await Promise.all(
-          chunk.map(async (hash, j) => {
-            await sleep(j * DELAY_MS) // stagger within the chunk
+          chunk.map(async ({ hash, idx }, j) => {
+            await sleep(j * DELAY_MS)
             try {
               const resolved = await resolveHash(hash, apiKey)
-              const idx = i + j
               if (resolved) {
                 results[idx].beatmapsetId = resolved.beatmapsetId
                 results[idx].title = resolved.title
                 results[idx].artist = resolved.artist
+                setCached(hash, resolved)
               }
             } catch {
-              // leave beatmapsetId as null — UI will show as unresolved
+              // leave beatmapsetId as null — UI will show as not found
             }
             completed++
             event.sender.send('osuApi:resolveProgress', { completed, total: hashes.length })
           })
         )
-        // Small inter-chunk pause to be polite to the API
-        if (i + CONCURRENCY < hashes.length) await sleep(300)
+        if (i + CONCURRENCY < toFetch.length) await sleep(300)
       }
 
       return { ok: true, data: results }
