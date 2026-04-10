@@ -122,23 +122,23 @@ export default function WelcomeView({ onGoToSettings, onGoToImport }: Props): JS
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <Step
               n={1}
-              title="Get an osu! API v1 key"
-              body="Go to osu.ppy.sh/p/api and register an application to get your key. Paste it into Settings → osu! API. This is used to resolve map hashes into beatmapset IDs."
+              title="Connect to the web app"
+              body="Open Settings → Web App Connection. Enter the URL and shared password your friend gave you, then click Test Connection to confirm it works."
             />
             <Step
               n={2}
-              title="Log in to osu! for direct downloads"
-              body="Go to osu.ppy.sh/home/account/edit → OAuth Applications → New OAuth Application. Set the callback URL to http://127.0.0.1/osu-hub-callback, then paste the Client ID and Secret into Settings → osu! Account and click Log in. This lets the app download maps directly from osu!'s servers — far more reliable than third-party mirrors."
+              title="Get an osu! API v1 key"
+              body="Go to osu.ppy.sh/p/api, log in, fill in any app name and URL, and copy the key you get. Paste it into Settings → osu! API Key. This lets the app look up which beatmapset a map belongs to."
             />
             <Step
               n={3}
-              title="Connect to the web app"
-              body="Enter the web app URL and shared password in Settings → Web App Connection. Hit Test Connection to confirm. This is where your friends' uploaded collections live."
+              title="Log in to osu! for direct downloads"
+              body="Go to osu.ppy.sh/home/account/edit, scroll down to OAuth Applications, and click New OAuth Application. Give it any name, set the callback URL exactly to http://127.0.0.1/osu-hub-callback, then click Register. Copy the Client ID and Client Secret into Settings → osu! Account, then click Log in to osu! — a browser window will open for you to approve access."
             />
             <Step
               n={4}
               title="Set your Songs folder and import"
-              body="Click Auto-detect in Settings → Songs Folder, then head to Import Collections. Pick a friend's upload, choose a collection, and click Download & Import. When it finishes, press F5 in osu! to scan for the new maps, then re-open osu! fully to load the updated collection list."
+              body="In Settings → osu! Songs Folder, click Auto-detect. Then go to Import Collections, pick a collection, and click Download & Import. When it finishes, press F5 in osu! to scan for new maps, then fully restart osu! to see the new collection."
             />
           </div>
         </div>
