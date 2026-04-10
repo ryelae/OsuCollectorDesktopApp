@@ -18,10 +18,11 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
   const [uploads, setUploads] = useState<UploadSummary[]>([])
   const [uploadsLoading, setUploadsLoading] = useState(false)
   const [uploadsError, setUploadsError] = useState('')
-  const [selectedUpload, setSelectedUpload] = useState<UploadSummary | null>(null)
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  const [collectionsByUpload, setCollectionsByUpload] = useState<Record<string, RemoteCollection[]>>({})
+  const [loadingUploads, setLoadingUploads] = useState<Set<string>>(new Set())
 
-  const [remoteCollections, setRemoteCollections] = useState<RemoteCollection[]>([])
-  const [collectionsLoading, setCollectionsLoading] = useState(false)
+  const [selectedUploadId, setSelectedUploadId] = useState<string | null>(null)
   const [selectedCollection, setSelectedCollection] = useState<RemoteCollection | null>(null)
 
   const [stage, setStage] = useState<Stage>('idle')
@@ -41,12 +42,25 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
 
   useEffect(() => () => { unsubResolve.current?.(); unsubDownload.current?.(); unsubSizes.current?.() }, [])
 
-  // Auto-refresh installed IDs when window regains focus (e.g. after manually deleting maps)
+  useEffect(() => { loadUploads() }, [])
+
   useEffect(() => {
     const onFocus = () => { if (maps.length > 0) refreshInstalled() }
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
   }, [maps])
+
+  async function fetchCollectionsForUploads(toLoad: UploadSummary[]) {
+    const ids = toLoad.map((u) => u.id)
+    setLoadingUploads((prev) => new Set([...prev, ...ids]))
+    await Promise.all(toLoad.map(async (u) => {
+      const res = await window.api.getUpload(u.id)
+      if (res.ok) {
+        setCollectionsByUpload((prev) => ({ ...prev, [u.id]: res.data.collections }))
+      }
+      setLoadingUploads((prev) => { const n = new Set(prev); n.delete(u.id); return n })
+    }))
+  }
 
   async function loadUploads() {
     setUploadsLoading(true)
@@ -55,29 +69,27 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
     setUploadsLoading(false)
     if (!res.ok) { setUploadsError(res.error); return }
     setUploads(res.data)
+    setExpandedGroups(new Set(res.data.map((u) => u.uploaderName)))
+    setCollectionsByUpload({})
+    fetchCollectionsForUploads(res.data)
   }
 
-  async function selectUpload(upload: UploadSummary) {
-    if (selectedUpload?.id === upload.id) {
-      setSelectedUpload(null)
-      setRemoteCollections([])
-      setSelectedCollection(null)
-      setMaps([])
-      return
-    }
-    setSelectedUpload(upload)
-    setSelectedCollection(null)
-    setMaps([])
-    setStage('idle')
-    setCollectionsLoading(true)
-    const res = await window.api.getUpload(upload.id)
-    setCollectionsLoading(false)
-    if (!res.ok) { setGeneralError(res.error); return }
-    setRemoteCollections(res.data.collections)
+  function toggleGroup(name: string, groupUploads: UploadSummary[]) {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(name)) {
+        next.delete(name)
+      } else {
+        next.add(name)
+        const unloaded = groupUploads.filter((u) => !collectionsByUpload[u.id] && !loadingUploads.has(u.id))
+        if (unloaded.length > 0) fetchCollectionsForUploads(unloaded)
+      }
+      return next
+    })
   }
 
-  async function selectCollection(col: RemoteCollection) {
-    if (!selectedUpload) return
+  async function selectCollection(uploadId: string, col: RemoteCollection) {
+    setSelectedUploadId(uploadId)
     setSelectedCollection(col)
     setGeneralError('')
     setResolveError('')
@@ -87,7 +99,7 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
     setStage('idle')
     setAddedToDb(false)
 
-    const hashRes = await window.api.getCollectionHashes(selectedUpload.id, col.id)
+    const hashRes = await window.api.getCollectionHashes(uploadId, col.id)
     if (!hashRes.ok) { setGeneralError(hashRes.error); return }
 
     const initial = hashRes.data.map((hash) => ({ hash, beatmapsetId: null as number | null }))
@@ -97,10 +109,7 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
 
   async function refreshInstalled() {
     const settings = await window.api.getSettings()
-    if (!settings.songsFolder) {
-      console.warn('refreshInstalled: no songsFolder configured')
-      return
-    }
+    if (!settings.songsFolder) return
     const res = await window.api.getInstalledIds(settings.songsFolder)
     console.log('refreshInstalled:', settings.songsFolder, res)
     if (res.ok) setInstalledIds(new Set(res.data))
@@ -121,7 +130,6 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
     if (!res.ok) { setResolveError(res.error); setStage('idle'); return }
     setMaps(res.data)
 
-    // Check which beatmapsets are already installed
     const settings = await window.api.getSettings()
     if (settings.songsFolder) {
       const installedRes = await window.api.getInstalledIds(settings.songsFolder)
@@ -130,13 +138,12 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
 
     setStage('idle')
 
-    // Fetch sizes in background — don't block the UI
     const uniqueIds = [...new Set(res.data.filter(m => m.beatmapsetId !== null).map(m => m.beatmapsetId!))]
     if (uniqueIds.length > 0) {
       setSizes({})
       setSizesLoading(true)
       unsubSizes.current?.()
-      unsubSizes.current = window.api.onSizesProgress(() => {}) // subscribe to keep channel alive
+      unsubSizes.current = window.api.onSizesProgress(() => {})
       const sizesRes = await window.api.fetchSizes(uniqueIds)
       unsubSizes.current?.()
       unsubSizes.current = null
@@ -146,14 +153,14 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
   }
 
   async function startDownload() {
-    if (!selectedCollection) return
+    if (!selectedCollection || !selectedUploadId) return
 
     const settings = await window.api.getSettings()
 
     const bySet = new Map<number, DownloadItem>()
     for (const m of maps) {
       if (m.beatmapsetId === null) continue
-      if (installedIds.has(m.beatmapsetId)) continue   // already installed
+      if (installedIds.has(m.beatmapsetId)) continue
       if (!bySet.has(m.beatmapsetId)) {
         bySet.set(m.beatmapsetId, { beatmapsetId: m.beatmapsetId, title: m.title, artist: m.artist, hashes: [], status: 'pending' })
       }
@@ -161,12 +168,12 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
     }
     const items = Array.from(bySet.values())
 
-    // All already installed — skip download, just write to collection.db
+    const allHashes = maps.filter((m) => m.beatmapsetId !== null).map((m) => m.hash)
+    const dbPath = settings.songsFolder
+      ? settings.songsFolder.replace(/[/\\]Songs[/\\]?$/, '') + '\\collection.db'
+      : null
+
     if (!items.length) {
-      const allHashes = maps.filter((m) => m.beatmapsetId !== null).map((m) => m.hash)
-      const dbPath = settings.songsFolder
-        ? settings.songsFolder.replace(/[/\\]Songs[/\\]?$/, '') + '\\collection.db'
-        : null
       if (dbPath && allHashes.length > 0) {
         const writeRes = await window.api.addHashesToCollection(dbPath, selectedCollection.name, allHashes)
         if (!writeRes.ok) setGeneralError(`Failed to update collection.db: ${writeRes.error}`)
@@ -199,15 +206,6 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
     unsubDownload.current?.()
     unsubDownload.current = null
 
-    // Write ALL resolved hashes to collection.db — not just downloaded ones.
-    // Already-installed maps should still appear in the collection.
-    const allHashes = maps
-      .filter((m) => m.beatmapsetId !== null)
-      .map((m) => m.hash)
-
-    const dbPath = settings.songsFolder
-      ? settings.songsFolder.replace(/[/\\]Songs[/\\]?$/, '') + '\\collection.db'
-      : null
     if (dbPath && allHashes.length > 0) {
       const writeRes = await window.api.addHashesToCollection(dbPath, selectedCollection.name, allHashes)
       if (!writeRes.ok) setGeneralError(`Downloaded OK but failed to update collection.db: ${writeRes.error}`)
@@ -216,7 +214,6 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
       setGeneralError('Downloaded OK but Songs folder not configured — collection.db not updated')
     }
 
-    // Refresh installed IDs so newly-downloaded maps show as Installed when user clicks Back
     await refreshInstalled()
   }
 
@@ -228,8 +225,6 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
   const unresolved = maps.filter((m) => m.beatmapsetId === null)
   const notInstalled = resolved.filter((m) => !installedIds.has(m.beatmapsetId!))
   const uniqueToDownload = new Set(notInstalled.map((m) => m.beatmapsetId)).size
-
-  // Total download size — only uninstalled beatmapsets with known sizes
   const uniqueToDownloadIds = new Set(notInstalled.map((m) => m.beatmapsetId!))
   const totalBytes = [...uniqueToDownloadIds].reduce((acc, id) => acc + (sizes[id] ?? 0), 0)
 
@@ -239,17 +234,21 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
+  // Group uploads by uploader name
+  const grouped = uploads.reduce((map, u) => {
+    if (!map.has(u.uploaderName)) map.set(u.uploaderName, [])
+    map.get(u.uploaderName)!.push(u)
+    return map
+  }, new Map<string, UploadSummary[]>())
+
   return (
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
       {/* Left panel */}
       <aside style={{
-        width: 240,
-        flexShrink: 0,
+        width: 240, flexShrink: 0,
         borderRight: '1px solid var(--border)',
         background: 'var(--surface)',
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden'
+        display: 'flex', flexDirection: 'column', overflow: 'hidden'
       }}>
         <div style={{ padding: '12px', borderBottom: '1px solid var(--divider)', flexShrink: 0 }}>
           <button
@@ -271,85 +270,76 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
           )}
 
           <div className="divide-list">
-            {uploads.map((u) => (
-              <div key={u.id}>
-                {/* Upload row */}
-                <button
-                  onClick={() => selectUpload(u)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    width: '100%',
-                    padding: '10px 12px',
-                    background: 'transparent',
-                    border: 'none',
-                    borderRadius: 0,
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                    gap: 8,
-                    transition: 'background 150ms'
-                  }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg)' }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
-                >
-                  <span style={{
-                    display: 'inline-block',
-                    transform: selectedUpload?.id === u.id ? 'rotate(90deg)' : 'rotate(0deg)',
-                    transition: 'transform 150ms',
-                    color: 'var(--text-400)',
-                    flexShrink: 0
-                  }}>
-                    <ChevronIcon />
-                  </span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 500, fontSize: 13, color: 'var(--text-900)' }}>{u.uploaderName}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-500)', marginTop: 1 }}>
-                      {u.collectionCount} collections · {u.totalMaps.toLocaleString()} maps
-                    </div>
-                  </div>
-                </button>
+            {[...grouped.entries()].map(([name, groupUploads]) => {
+              const isOpen = expandedGroups.has(name)
+              const totalMaps = groupUploads.reduce((a, u) => a + u.totalMaps, 0)
+              const totalCollections = groupUploads.reduce((a, u) => a + u.collectionCount, 0)
+              const isLoading = groupUploads.some((u) => loadingUploads.has(u.id))
+              const allCollections = groupUploads.flatMap((u) =>
+                (collectionsByUpload[u.id] ?? []).map((col) => ({ col, uploadId: u.id }))
+              )
 
-                {/* Collections sub-list */}
-                {selectedUpload?.id === u.id && (
-                  <div style={{ background: 'var(--bg)', borderTop: '1px solid var(--divider)', borderBottom: '1px solid var(--divider)' }}>
-                    {collectionsLoading && (
-                      <p style={{ padding: '8px 16px', color: 'var(--text-500)', fontSize: 12 }}>Loading…</p>
-                    )}
-                    <div className="divide-list">
-                      {remoteCollections.map((col) => {
+              return (
+                <div key={name}>
+                  {/* Group header */}
+                  <button
+                    onClick={() => toggleGroup(name, groupUploads)}
+                    style={{
+                      display: 'flex', alignItems: 'center', width: '100%',
+                      padding: '10px 12px', background: 'transparent', border: 'none',
+                      borderRadius: 0, textAlign: 'left', cursor: 'pointer', gap: 8,
+                      transition: 'background 150ms'
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg)' }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+                  >
+                    <span style={{ display: 'inline-block', transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 150ms', color: 'var(--text-400)', flexShrink: 0 }}>
+                      <ChevronIcon />
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-900)' }}>{name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-500)', marginTop: 1 }}>
+                        {totalCollections} collections · {totalMaps.toLocaleString()} maps
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Collections directly under group */}
+                  {isOpen && (
+                    <div style={{ borderTop: '1px solid var(--divider)' }}>
+                      {isLoading && (
+                        <p style={{ padding: '8px 12px 8px 32px', color: 'var(--text-400)', fontSize: 12 }}>Loading…</p>
+                      )}
+                      {allCollections.map(({ col, uploadId }) => {
                         const active = selectedCollection?.id === col.id
                         return (
                           <button
                             key={col.id}
-                            onClick={() => selectCollection(col)}
+                            onClick={() => selectCollection(uploadId, col)}
                             style={{
-                              display: 'block',
-                              width: '100%',
-                              padding: '8px 16px 8px 32px',
+                              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                              width: '100%', padding: '8px 12px 8px 40px',
                               background: active ? 'var(--brand-50)' : 'transparent',
-                              border: 'none',
-                              borderRadius: 0,
-                              textAlign: 'left',
-                              cursor: 'pointer',
-                              transition: 'background 150ms'
+                              border: 'none', borderRadius: 0, textAlign: 'left',
+                              cursor: 'pointer', transition: 'background 150ms', gap: 8
                             }}
-                            onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface)' }}
-                            onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+                            onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg)' }}
+                            onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = active ? 'var(--brand-50)' : 'transparent' }}
                           >
-                            <div style={{ fontSize: 13, color: active ? 'var(--brand-700)' : 'var(--text-700)', fontWeight: active ? 500 : 400 }}>
+                            <div style={{ fontSize: 13, color: active ? 'var(--brand-700)' : 'var(--text-700)', fontWeight: active ? 500 : 400, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {col.name || <em style={{ color: 'var(--text-400)' }}>Unnamed</em>}
                             </div>
-                            <div style={{ fontSize: 11, color: active ? 'var(--brand-500)' : 'var(--text-400)', marginTop: 1 }}>
-                              {col.mapCount.toLocaleString()} maps
+                            <div style={{ fontSize: 11, color: active ? 'var(--brand-500)' : 'var(--text-400)', flexShrink: 0 }}>
+                              {col.mapCount.toLocaleString()}
                             </div>
                           </button>
                         )
                       })}
                     </div>
-                  </div>
-                )}
-              </div>
-            ))}
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
       </aside>
@@ -361,10 +351,7 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
             <div className="alert-error">
               {generalError}
               {generalError.includes('Songs folder') && (
-                <button
-                  onClick={onGoToSettings}
-                  style={{ marginLeft: 12, fontSize: 12, color: 'var(--red-600)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
-                >
+                <button onClick={onGoToSettings} style={{ marginLeft: 12, fontSize: 12, color: 'var(--red-600)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
                   Open Settings
                 </button>
               )}
@@ -381,7 +368,6 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-            {/* Header card */}
             <div style={{ padding: '16px 24px', flexShrink: 0, borderBottom: '1px solid var(--border)', background: 'var(--surface)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <h2 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-900)', flex: 1 }}>
@@ -395,9 +381,7 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
                 {stage === 'idle' && maps.length > 0 && (
                   <>
                     <span className="badge badge-slate">{resolved.length} resolved</span>
-                    {unresolved.length > 0 && (
-                      <span className="badge badge-red">{unresolved.length} unresolved</span>
-                    )}
+                    {unresolved.length > 0 && <span className="badge badge-red">{unresolved.length} unresolved</span>}
                   </>
                 )}
                 {resolveError && (
@@ -427,7 +411,6 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
                 )}
               </div>
 
-              {/* Resolve progress bar */}
               {stage === 'resolve' && resolveProgress && (
                 <div style={{ marginTop: 10 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-500)', marginBottom: 4 }}>
@@ -452,7 +435,6 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
               )}
             </div>
 
-            {/* Maps table */}
             <div className="scroll-area" style={{ flex: 1 }}>
               {maps.length === 0 ? (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>

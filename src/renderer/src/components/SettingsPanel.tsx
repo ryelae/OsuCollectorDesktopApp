@@ -1,6 +1,33 @@
 import { useEffect, useState } from 'react'
 import type { AppSettings } from '../../../shared/types'
 
+function RevealInput({ value, placeholder, onChange }: { value: string; placeholder?: string; onChange: (v: string) => void }) {
+  const [show, setShow] = useState(false)
+  return (
+    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+      <input
+        type={show ? 'text' : 'password'}
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        style={{ flex: 1, paddingRight: 56 }}
+      />
+      <button
+        type="button"
+        onClick={() => setShow((s) => !s)}
+        style={{
+          position: 'absolute', right: 8,
+          background: 'none', border: 'none', cursor: 'pointer',
+          fontSize: 12, color: 'var(--text-400)', padding: '2px 4px',
+          userSelect: 'none'
+        }}
+      >
+        {show ? 'Hide' : 'Show'}
+      </button>
+    </div>
+  )
+}
+
 type PingState = 'idle' | 'loading' | 'ok' | 'fail'
 type LoginState = 'idle' | 'loading' | 'ok' | 'fail'
 
@@ -107,11 +134,10 @@ export default function SettingsPanel(): JSX.Element {
             </div>
             <div className="field">
               <label>Shared Password</label>
-              <input
-                type="password"
+              <RevealInput
                 value={settings.webAppPassword}
                 placeholder="••••••••"
-                onChange={(e) => setSettings((s) => ({ ...s, webAppPassword: e.target.value }))}
+                onChange={(v) => setSettings((s) => ({ ...s, webAppPassword: v }))}
               />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -131,10 +157,10 @@ export default function SettingsPanel(): JSX.Element {
           <SectionHeading>osu! API</SectionHeading>
           <div className="field">
             <label>API v1 Key</label>
-            <input
+            <RevealInput
               value={settings.osuApiKey}
               placeholder="Get from osu.ppy.sh/p/api"
-              onChange={(e) => setSettings((s) => ({ ...s, osuApiKey: e.target.value }))}
+              onChange={(v) => setSettings((s) => ({ ...s, osuApiKey: v }))}
             />
           </div>
         </div>
@@ -161,11 +187,10 @@ export default function SettingsPanel(): JSX.Element {
             </div>
             <div className="field">
               <label>Client Secret</label>
-              <input
-                type="password"
+              <RevealInput
                 value={settings.osuClientSecret}
                 placeholder="••••••••••••••••"
-                onChange={(e) => setSettings((s) => ({ ...s, osuClientSecret: e.target.value }))}
+                onChange={(v) => setSettings((s) => ({ ...s, osuClientSecret: v }))}
               />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>

@@ -14,7 +14,10 @@ async function resolveHash(hash: string, apiKey: string): Promise<{ beatmapsetId
   const res = await fetch(url)
   if (!res.ok) throw new Error(`osu! API HTTP ${res.status}`)
   const maps = await res.json() as Array<{ beatmapset_id: string; title: string; artist: string }>
-  if (!maps.length) return null
+  if (!maps.length) {
+    console.log(`[osuApi] unresolved hash: ${hash} (API returned empty array — map likely removed or never submitted)`)
+    return null
+  }
   return {
     beatmapsetId: parseInt(maps[0].beatmapset_id, 10),
     title: maps[0].title,
@@ -90,6 +93,13 @@ export function registerOsuApiHandlers(): void {
           })
         )
         if (i + CONCURRENCY < toFetch.length) await sleep(300)
+      }
+
+      const unresolved = results.filter((r) => r.beatmapsetId === null)
+      if (unresolved.length > 0) {
+        console.log(`[osuApi] ${unresolved.length} unresolved hash(es) after full resolution:`)
+        unresolved.forEach((r) => console.log(`  ${r.hash}`))
+        console.log(`[osuApi] Possible reasons: map DMCA'd/deleted, local-only difficulty, or modified .osu file`)
       }
 
       return { ok: true, data: results }
