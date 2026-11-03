@@ -112,7 +112,6 @@ export default function CompareView({ onGoToSettings }: Props): JSX.Element {
     const settings = await window.api.getSettings()
     if (!settings.songsFolder) return
     const res = await window.api.getInstalledIds(settings.songsFolder)
-    console.log('refreshInstalled:', settings.songsFolder, res)
     if (res.ok) setInstalledIds(new Set(res.data))
   }
 
