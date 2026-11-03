@@ -1,6 +1,7 @@
 node_modules/
 dist/
 out/
+*.tsbuildinfo
 .claude/
 
 # electron-store settings (contains personal API keys + passwords)
